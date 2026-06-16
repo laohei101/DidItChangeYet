@@ -1,0 +1,111 @@
+# http-watcher example configuration
+# Copy to config.yaml and customise.
+# Environment variables can be injected with {{VAR_NAME}} syntax.
+
+# Default poll interval applied to any watch that does not set its own.
+global_interval: "5m"
+
+# Default HTTP timeout per request.
+global_timeout: "30s"
+
+# Where to persist last-known values between restarts.
+state_file: "state.json"
+
+# Log format: "text" (default) or "json"
+log_format: "text"
+
+# Log level: "debug", "info" (default), "warn", "error"
+log_level: "info"
+
+# Optional web dashboard (http://localhost:8080)
+dashboard:
+  enabled: true
+  port: 8080
+
+watches:
+
+  # ── JSON field comparison ─────────────────────────────────────────────────
+  - id: product_price
+    url: https://api.example.com/products/123
+    method: GET
+    headers:
+      Authorization: "Bearer {{API_TOKEN}}"
+      Accept: "application/json"
+    type: json
+    json_path: "data.price"   # gjson path — supports nested keys and arrays
+    condition: below
+    threshold: "50"           # trigger when price drops below 50
+    interval: "10m"
+    alerts:
+      - type: telegram
+        token: "{{TELEGRAM_TOKEN}}"
+        chat_id: "{{TELEGRAM_CHAT_ID}}"
+      - type: ntfy
+        server: https://ntfy.sh
+        topic: "my-price-alerts"
+        priority: high
+
+  # ── HTML element watcher ──────────────────────────────────────────────────
+  - id: homepage_title
+    url: https://example.com
+    type: html
+    css_selector: "h1"        # CSS selector for the element to watch
+    # attribute: "href"       # optional: watch an attribute instead of text
+    condition: changed
+    interval: "1h"
+    alerts:
+      - type: email
+        smtp_host: smtp.gmail.com
+        smtp_port: 587
+        tls: false            # true for port 465 (implicit TLS)
+        username: "{{GMAIL_USER}}"
+        password: "{{GMAIL_APP_PASSWORD}}"
+        from: "watcher@example.com"
+        to: "you@example.com"
+
+  # ── HTTP status watcher ───────────────────────────────────────────────────
+  - id: api_health
+    url: https://api.example.com/health
+    type: http_status
+    condition: equals
+    threshold: "200"           # alert if status code != 200
+    interval: "2m"
+    alerts:
+      - type: ntfy
+        topic: "infra-alerts"
+
+  # ── Full-body hash (detects ANY change on the page) ───────────────────────
+  - id: docs_page
+    url: https://docs.example.com/changelog
+    type: text
+    condition: changed
+    interval: "*/30 * * * *"   # standard 5-field cron: every 30 minutes
+    alerts:
+      - type: telegram
+        token: "{{TELEGRAM_TOKEN}}"
+        chat_id: "{{TELEGRAM_CHAT_ID}}"
+
+  # ── JSON field absence alert ──────────────────────────────────────────────
+  - id: feature_flag
+    url: https://api.example.com/flags
+    type: json
+    json_path: "flags.new_feature"
+    condition: absence         # alert if the field disappears
+    interval: "15m"
+    alerts:
+      - type: ntfy
+        topic: "feature-flags"
+
+  # ── Regex match on response body ──────────────────────────────────────────
+  - id: stock_level
+    url: https://shop.example.com/product/xyz
+    type: html
+    css_selector: ".stock-status"
+    condition: regex
+    pattern: "(In Stock|Available)"
+    interval: "5m"
+    timeout: "10s"             # override per-watch HTTP timeout
+    alerts:
+      - type: telegram
+        token: "{{TELEGRAM_TOKEN}}"
+        chat_id: "{{TELEGRAM_CHAT_ID}}"
